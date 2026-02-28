@@ -3,6 +3,15 @@ import { UpstreamError, UpstreamTimeoutError } from "../lib/errors";
 import { CachedScheduleGame, ScheduleCache } from "./schedule-cache";
 
 export interface ScheduleGameSummary extends CachedScheduleGame {}
+export interface NbaLiveGameSummary {
+  gameId: string;
+  scheduled?: string;
+  status?: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number;
+  awayScore?: number;
+}
 
 export interface SportradarClientConfig {
   apiKey: string;
@@ -65,6 +74,15 @@ export class SportradarClient {
   async getGamePlayByPlay(gameId: string): Promise<unknown> {
     const path = `/games/${gameId}/pbp.json`;
     return this.fetchJson(path, "getGamePlayByPlay");
+  }
+
+  async getDailyScheduleGames(date = new Date()): Promise<NbaLiveGameSummary[]> {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    const path = `/games/${year}/${month}/${day}/schedule.json`;
+    const payload = await this.fetchJson(path, "getDailySchedule");
+    return extractDailyScheduleGames(payload);
   }
 
   private async fetchJson(path: string, operation: string): Promise<unknown> {
@@ -155,6 +173,38 @@ export function extractScheduleGames(payload: unknown): ScheduleGameSummary[] {
   return summaries;
 }
 
+export function extractDailyScheduleGames(payload: unknown): NbaLiveGameSummary[] {
+  if (!payload || typeof payload !== "object") {
+    throw new UpstreamError("Invalid daily schedule payload shape.", {
+      provider: "sportradar",
+      operation: "getDailySchedule",
+    });
+  }
+  const candidates = toArray((payload as any).games)
+    ?? toArray((payload as any).game)
+    ?? toArray((payload as any).league?.games)
+    ?? [];
+  const out: NbaLiveGameSummary[] = [];
+  for (const candidate of candidates) {
+    const gameId = asString(candidate?.id);
+    if (!gameId) {
+      continue;
+    }
+    const home = asObject(candidate?.home);
+    const away = asObject(candidate?.away);
+    out.push({
+      gameId,
+      scheduled: asString(candidate?.scheduled) ?? asString(candidate?.scheduled_at) ?? undefined,
+      status: asString(candidate?.status) ?? undefined,
+      homeTeam: asString(home?.name) ?? asString(home?.alias) ?? undefined,
+      awayTeam: asString(away?.name) ?? asString(away?.alias) ?? undefined,
+      homeScore: asNumber(candidate?.home_points) ?? asNumber(home?.points) ?? undefined,
+      awayScore: asNumber(candidate?.away_points) ?? asNumber(away?.points) ?? undefined,
+    });
+  }
+  return out;
+}
+
 function toArray(value: unknown): any[] | null {
   return Array.isArray(value) ? value : null;
 }
@@ -168,6 +218,19 @@ function asObject(value: unknown): Record<string, any> {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 function isClosedOrComplete(status?: string): boolean {

@@ -1,10 +1,12 @@
 import { FastifyInstance } from "fastify";
-import { NotFoundError } from "../../lib/errors";
+import { Sport } from "../../domain/situation";
+import { InvalidRequestError, NotFoundError } from "../../lib/errors";
 import { SituationRepository } from "../../repositories/situation-repository";
-import { buildGamesCsv, sortAndLimitGames } from "../../services/situation-games";
+import { AdapterRegistry } from "../../services/adapters/adapter-registry";
 
 interface ExportCsvDeps {
   situationRepository: SituationRepository;
+  adapterRegistry: AdapterRegistry;
 }
 
 const exportCsvSchema = {
@@ -19,7 +21,9 @@ const exportCsvSchema = {
   querystring: {
     type: "object",
     additionalProperties: false,
+    required: ["sport"],
     properties: {
+      sport: { type: "string", enum: ["nba", "soccer"] },
       includeSummary: { type: "boolean", default: true },
     },
   },
@@ -29,7 +33,7 @@ export async function registerExportSituationCsvRoute(
   app: FastifyInstance,
   deps: ExportCsvDeps,
 ): Promise<void> {
-  app.get<{ Params: { id: string }; Querystring: { includeSummary?: boolean } }>(
+  app.get<{ Params: { id: string }; Querystring: { sport: Sport; includeSummary?: boolean } }>(
     "/v1/situations/:id/export.csv",
     { schema: exportCsvSchema },
     async (request, reply) => {
@@ -37,15 +41,14 @@ export async function registerExportSituationCsvRoute(
       if (!situation) {
         throw new NotFoundError("Situation not found or expired.", { id: request.params.id });
       }
-
-      const rows = sortAndLimitGames(situation.stats.byGame, "pts", "desc");
-      const csv = buildGamesCsv(
-        situation.id,
-        rows,
-        request.query.includeSummary ?? true,
-        situation.stats.totals,
-        situation.stats.perStart,
-      );
+      if (situation.sport !== request.query.sport) {
+        throw new InvalidRequestError("sport query does not match stored situation sport.", {
+          expected: situation.sport,
+          received: request.query.sport,
+        });
+      }
+      const adapter = deps.adapterRegistry.get(request.query.sport);
+      const csv = adapter.exportCsv(situation);
 
       reply.header("Content-Type", "text/csv; charset=utf-8");
       reply.header("Content-Disposition", `attachment; filename=\"situation_${situation.id}.csv\"`);

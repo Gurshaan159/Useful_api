@@ -5,16 +5,20 @@ import { Situation } from "../src/domain/situation";
 function makeSituation(id = "sit_extra"): Situation {
   return {
     id,
+    sport: "nba",
     schemaVersion: 1,
     createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     expiresAt: new Date("2026-01-01T00:30:00.000Z").toISOString(),
     status: "ready",
     inputs: {
+      sport: "nba",
       player: { name: "LeBron James", team: "LAL" },
       filters: {
-        quarter: 4,
-        timeRemainingSeconds: { gte: 0, lte: 720 },
-        scoreDiff: { gte: -50, lte: 50 },
+        nba: {
+          quarter: 4,
+          timeRemainingSeconds: { gte: 0, lte: 720 },
+          scoreDiff: { gte: -50, lte: 50 },
+        },
       },
       limits: { maxGames: 4, minStarts: 2, maxStartsPerGame: 1 },
       season: { year: 2025, type: "REG" },
@@ -37,9 +41,9 @@ function makeSituation(id = "sit_extra"): Situation {
       totals: { pts: 13, reb: 5, ast: 6, threePm: 1 },
       perStart: { pts: 3.25, reb: 1.25, ast: 1.5, threePm: 0.25 },
       byGame: [
-        { gameId: "g2", pts: 7, reb: 0, ast: 1, threePm: 0 },
-        { gameId: "g1", pts: 4, reb: 2, ast: 0, threePm: 0 },
-        { gameId: "g3", pts: 2, reb: 2, ast: 2, threePm: 1 },
+        { gameId: "g2", stats: { pts: 7, reb: 0, ast: 1, threePm: 0 } },
+        { gameId: "g1", stats: { pts: 4, reb: 2, ast: 0, threePm: 0 } },
+        { gameId: "g3", stats: { pts: 2, reb: 2, ast: 2, threePm: 1 } },
       ],
     },
     matchedStarts: [
@@ -64,7 +68,7 @@ describe("Additional GET endpoints", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/situations/sit_summary-1/analysis",
+      url: "/v1/situations/sit_summary-1/analysis?sport=nba",
     });
 
     expect(response.statusCode).toBe(200);
@@ -96,7 +100,7 @@ describe("Additional GET endpoints", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/v1/situations/sit_csv-1/export.csv?includeSummary=false",
+      url: "/v1/situations/sit_csv-1/export.csv?sport=nba&includeSummary=false",
     });
 
     expect(response.statusCode).toBe(200);

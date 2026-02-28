@@ -6,16 +6,20 @@ import { AmbiguousPlayerError, UpstreamError } from "../src/lib/errors";
 function makeSituation(id = "sit_test"): Situation {
   return {
     id,
+    sport: "nba",
     schemaVersion: 1,
     createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     expiresAt: new Date("2026-01-01T00:30:00.000Z").toISOString(),
     status: "ready",
     inputs: {
+      sport: "nba",
       player: { name: "Stephen Curry" },
       filters: {
-        quarter: 4,
-        timeRemainingSeconds: { gte: 120, lte: 300 },
-        scoreDiff: { gte: -5, lte: 5 },
+        nba: {
+          quarter: 4,
+          timeRemainingSeconds: { gte: 120, lte: 300 },
+          scoreDiff: { gte: -5, lte: 5 },
+        },
       },
       limits: {
         maxGames: 50,
@@ -41,7 +45,7 @@ function makeSituation(id = "sit_test"): Situation {
     stats: {
       totals: { pts: 10, ast: 2, reb: 3, threePm: 2 },
       perStart: { pts: 10, ast: 2, reb: 3, threePm: 2 },
-      byGame: [{ gameId: "g1", pts: 10, ast: 2, reb: 3, threePm: 2 }],
+      byGame: [{ gameId: "g1", stats: { pts: 10, ast: 2, reb: 3, threePm: 2 } }],
     },
     matchedStarts: [{ gameId: "g1", period: 4, clockSecondsRemaining: 200, scoreDiffAtStart: 1 }],
   };
@@ -71,10 +75,13 @@ describe("POST /v1/situations contract", () => {
       payload: {
         player: { name: "Stephen Curry" },
         filters: {
-          quarter: 4,
-          timeRemainingSeconds: { gte: 120, lte: 300 },
-          scoreDiff: { gte: -5, lte: 5 },
+          nba: {
+            quarter: 4,
+            timeRemainingSeconds: { gte: 120, lte: 300 },
+            scoreDiff: { gte: -5, lte: 5 },
+          },
         },
+        sport: "nba",
         season: { year: 2025, type: "REG" },
       },
     });
@@ -103,10 +110,13 @@ describe("POST /v1/situations contract", () => {
       payload: {
         player: { name: "Stephen Curry" },
         filters: {
-          quarter: 4,
-          timeRemainingSeconds: { gte: 400, lte: 300 },
-          scoreDiff: { gte: -5, lte: 5 },
+          nba: {
+            quarter: 4,
+            timeRemainingSeconds: { gte: 400, lte: 300 },
+            scoreDiff: { gte: -5, lte: 5 },
+          },
         },
+        sport: "nba",
         season: { year: 2025, type: "REG" },
       },
     });
@@ -152,10 +162,13 @@ describe("POST /v1/situations contract", () => {
       payload: {
         player: { name: "Jalen Williams" },
         filters: {
-          quarter: 4,
-          timeRemainingSeconds: { gte: 120, lte: 300 },
-          scoreDiff: { gte: -5, lte: 5 },
+          nba: {
+            quarter: 4,
+            timeRemainingSeconds: { gte: 120, lte: 300 },
+            scoreDiff: { gte: -5, lte: 5 },
+          },
         },
+        sport: "nba",
         season: { year: 2025, type: "REG" },
       },
     });
@@ -181,10 +194,13 @@ describe("POST /v1/situations contract", () => {
       payload: {
         player: { name: "Stephen Curry" },
         filters: {
-          quarter: 4,
-          timeRemainingSeconds: { gte: 120, lte: 300 },
-          scoreDiff: { gte: -5, lte: 5 },
+          nba: {
+            quarter: 4,
+            timeRemainingSeconds: { gte: 120, lte: 300 },
+            scoreDiff: { gte: -5, lte: 5 },
+          },
         },
+        sport: "nba",
         game: { id: "sr_game_1" },
       },
     });

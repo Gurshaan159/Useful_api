@@ -12,8 +12,8 @@ type TableColumn = (typeof COLUMNS)[number];
 
 export function renderByGameStatsTable(rows: SituationByGameStatLine[]): string {
   const sortedRows = [...rows].sort((a, b) => {
-    if (b.pts !== a.pts) {
-      return b.pts - a.pts;
+    if ((b.stats.pts ?? 0) !== (a.stats.pts ?? 0)) {
+      return (b.stats.pts ?? 0) - (a.stats.pts ?? 0);
     }
     return a.gameId.localeCompare(b.gameId);
   });
@@ -23,8 +23,10 @@ export function renderByGameStatsTable(rows: SituationByGameStatLine[]): string 
   const separator = COLUMNS.map((column) => "-".repeat(widths.get(column.key)!)).join("-+-");
   const body = sortedRows.map((row) =>
     COLUMNS.map((column) => {
-      const value = String(row[column.key]);
-      return padValue(value, widths.get(column.key)!, column);
+      const normalizedValue = column.key === "gameId"
+        ? row.gameId
+        : String(row.stats[column.key as keyof typeof row.stats] ?? 0);
+      return padValue(normalizedValue, widths.get(column.key)!, column);
     }).join(" | "));
 
   if (body.length === 0) {
@@ -42,7 +44,9 @@ function computeWidths(rows: SituationByGameStatLine[]): Map<TableColumn["key"],
   for (const row of rows) {
     for (const column of COLUMNS) {
       const current = widths.get(column.key)!;
-      const valueLength = String(row[column.key]).length;
+      const valueLength = column.key === "gameId"
+        ? row.gameId.length
+        : String(row.stats[column.key as keyof typeof row.stats] ?? 0).length;
       widths.set(column.key, Math.max(current, valueLength));
     }
   }

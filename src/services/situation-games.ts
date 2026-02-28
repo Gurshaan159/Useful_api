@@ -38,10 +38,10 @@ export function buildGamesCsv(
     lines.push(
       [
         escapeCsv(row.gameId),
-        row.pts.toString(),
-        row.reb.toString(),
-        row.ast.toString(),
-        row.threePm.toString(),
+        (row.stats.pts ?? 0).toString(),
+        (row.stats.reb ?? 0).toString(),
+        (row.stats.ast ?? 0).toString(),
+        (row.stats.threePm ?? 0).toString(),
       ].join(","),
     );
   }
@@ -59,10 +59,10 @@ function compareRows(
     return a.gameId.localeCompare(b.gameId) * direction;
   }
 
-  const aVal = a[sortBy];
-  const bVal = b[sortBy];
-  if (aVal !== bVal) {
-    return (aVal - bVal) * direction;
+  const bVal = b.stats[sortBy];
+  const aStatVal = a.stats[sortBy];
+  if (aStatVal !== bVal) {
+    return ((aStatVal ?? 0) - (bVal ?? 0)) * direction;
   }
   return a.gameId.localeCompare(b.gameId);
 }

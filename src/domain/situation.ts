@@ -1,4 +1,5 @@
 export type ReliabilityGrade = "A" | "B" | "C" | "D";
+export type Sport = "nba" | "soccer";
 
 export type SituationStatus = "ready" | "failed";
 
@@ -16,13 +17,22 @@ export interface SituationRange {
 
 export interface SituationPlayerInput {
   name: string;
+  id?: string;
   team?: string;
 }
 
 export interface SituationFiltersInput {
-  quarter: 1 | 2 | 3 | 4;
-  timeRemainingSeconds: SituationRange;
-  scoreDiff: SituationRange;
+  nba?: {
+    quarter: 1 | 2 | 3 | 4;
+    timeRemainingSeconds: SituationRange;
+    scoreDiff: SituationRange;
+  };
+  soccer?: {
+    half: 1 | 2;
+    minuteRange: SituationRange;
+    scoreState: "leading" | "drawing" | "trailing";
+    goalDiffRange?: SituationRange;
+  };
 }
 
 export interface SituationLimitsInput {
@@ -41,6 +51,7 @@ export interface SituationSeasonInput {
 }
 
 export interface SituationInputs {
+  sport: Sport;
   player: SituationPlayerInput;
   filters: SituationFiltersInput;
   limits: SituationLimitsInput;
@@ -50,9 +61,12 @@ export interface SituationInputs {
 
 export interface SituationMatchedStart {
   gameId: string;
-  period: number;
-  clockSecondsRemaining: number;
-  scoreDiffAtStart: number;
+  period?: number;
+  half?: number;
+  minute?: number;
+  clockSecondsRemaining?: number;
+  scoreDiffAtStart?: number;
+  goalDiffAtStart?: number;
 }
 
 export interface SituationStatLine {
@@ -60,14 +74,22 @@ export interface SituationStatLine {
   ast: number;
   reb: number;
   threePm: number;
+  goals?: number;
+  assists?: number;
+  shots?: number;
+  yellowCards?: number;
+  redCards?: number;
+  substitutions?: number;
 }
 
-export interface SituationByGameStatLine extends SituationStatLine {
+export interface SituationByGameStatLine {
   gameId: string;
+  stats: SituationStatLine;
 }
 
 export interface Situation {
   id: string;
+  sport: Sport;
   schemaVersion: number;
   createdAt: string;
   expiresAt: string;

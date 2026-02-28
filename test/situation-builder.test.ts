@@ -3,11 +3,14 @@ import { SituationBuilder } from "../src/services/situation-builder";
 import { SituationInputs } from "../src/domain/situation";
 
 const inputs: SituationInputs = {
+  sport: "nba",
   player: { name: "Stephen Curry" },
   filters: {
-    quarter: 4,
-    timeRemainingSeconds: { gte: 120, lte: 300 },
-    scoreDiff: { gte: -5, lte: 5 },
+    nba: {
+      quarter: 4,
+      timeRemainingSeconds: { gte: 120, lte: 300 },
+      scoreDiff: { gte: -5, lte: 5 },
+    },
   },
   limits: {
     maxGames: 50,
@@ -49,6 +52,7 @@ describe("SituationBuilder", () => {
 
     const situation = await builder.build(inputs);
     expect(situation.id).toBe("sit_fixed");
+    expect(situation.sport).toBe("nba");
     expect(situation.meta.startsMatched).toBe(2);
     expect(situation.matchedStarts).toHaveLength(2);
     expect(situation.stats.totals).toEqual({
@@ -64,7 +68,7 @@ describe("SituationBuilder", () => {
       threePm: 1,
     });
     expect(situation.stats.byGame).toEqual([
-      { gameId: "g1", pts: 16, ast: 3, reb: 2, threePm: 2 },
+      { gameId: "g1", stats: { pts: 16, ast: 3, reb: 2, threePm: 2 } },
     ]);
   });
 
@@ -95,6 +99,6 @@ describe("SituationBuilder", () => {
     expect(situation.meta.reliabilityGrade).toBe("D");
     expect(situation.stats.totals).toEqual({ pts: 0, ast: 0, reb: 0, threePm: 0 });
     expect(situation.stats.perStart).toEqual({ pts: 0, ast: 0, reb: 0, threePm: 0 });
-    expect(situation.stats.byGame).toEqual([{ gameId: "g2", pts: 0, ast: 0, reb: 0, threePm: 0 }]);
+    expect(situation.stats.byGame).toEqual([{ gameId: "g2", stats: { pts: 0, ast: 0, reb: 0, threePm: 0 } }]);
   });
 });

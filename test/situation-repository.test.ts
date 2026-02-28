@@ -5,16 +5,20 @@ import { Situation } from "../src/domain/situation";
 function fixtureSituation(id: string): Situation {
   return {
     id,
+    sport: "nba",
     schemaVersion: 1,
     createdAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     expiresAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
     status: "ready",
     inputs: {
+      sport: "nba",
       player: { name: "Stephen Curry" },
       filters: {
-        quarter: 4,
-        timeRemainingSeconds: { gte: 120, lte: 300 },
-        scoreDiff: { gte: -5, lte: 5 },
+        nba: {
+          quarter: 4,
+          timeRemainingSeconds: { gte: 120, lte: 300 },
+          scoreDiff: { gte: -5, lte: 5 },
+        },
       },
       limits: { maxGames: 50, minStarts: 10, maxStartsPerGame: 3 },
       game: { id: "g1" },
@@ -36,7 +40,7 @@ function fixtureSituation(id: string): Situation {
     stats: {
       totals: { pts: 1, ast: 2, reb: 3, threePm: 4 },
       perStart: { pts: 1, ast: 2, reb: 3, threePm: 4 },
-      byGame: [{ gameId: "g1", pts: 1, ast: 2, reb: 3, threePm: 4 }],
+      byGame: [{ gameId: "g1", stats: { pts: 1, ast: 2, reb: 3, threePm: 4 } }],
     },
     matchedStarts: [{ gameId: "g1", period: 4, clockSecondsRemaining: 200, scoreDiffAtStart: 0 }],
   };

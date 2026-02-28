@@ -46,6 +46,14 @@ export class InMemorySituationRepository implements SituationRepository {
     return hit;
   }
 
+  async update(id: string, patch: Partial<Situation>): Promise<void> {
+    const current = await this.getById(id);
+    if (!current) {
+      return;
+    }
+    this.store.set(id, { ...current, ...patch });
+  }
+
   close(): void {
     clearInterval(this.sweepTimer);
   }
