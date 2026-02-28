@@ -1,5 +1,4 @@
-# Useful API (Sport-Aware + Live Soccer MVP)
-
+## GAMETIME.API
 Fastify + TypeScript API for:
 - historical situation analysis (`nba` and `soccer`)
 - analysis retrieval + CSV export from stored situations
