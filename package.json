@@ -1,0 +1,23 @@
+{
+  "name": "useful-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "fastify": "^5.6.1",
+    "fastify-plugin": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
