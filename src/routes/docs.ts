@@ -35,26 +35,14 @@ export async function registerDocsRoute(app: FastifyInstance): Promise<void> {
   <p><strong>Install:</strong></p>
   <pre><code>npm install gametime-api-client</code></pre>
 
-  <p><strong>Quick Start:</strong></p>
+  <p><strong>Example – Historical situation analysis &amp; CSV export</strong></p>
+  <p>Create a &quot;situation&quot; (player + game filters, e.g. 4th quarter, down 1–15), fetch stats, and export to CSV. <code>limits</code> controls how many games are scanned and how many matching &quot;starts&quot; (e.g. possessions) per game.</p>
   <pre><code>import { gametime } from 'gametime-api-client';
+import { writeFileSync } from 'fs';
 
-const games = await gametime.live.games('soccer');
-const analysis = await gametime.live.soccerAnalysis({
-  sportEventId: games[0].sportEventId,
-});
-console.log(analysis.prediction.projectedFinal);</code></pre>
-
-  <p><strong>NBA example:</strong></p>
-  <pre><code>const games = await gametime.live.games('nba');
-const analysis = await gametime.live.nbaAnalysis({
-  sportEventId: games[0].sportEventId,
-  focusPlayerId: 'sr:player:123',
-});</code></pre>
-
-  <p><strong>Situations (historical stats):</strong></p>
-  <pre><code>const { id } = await gametime.situations.create({
+const { id } = await gametime.situations.create({
   sport: 'nba',
-  player: { name: 'LeBron James', team: 'LAL' },
+  player: { name: 'Austin Reaves', team: 'LAL' },
   filters: {
     nba: {
       quarter: 4,
@@ -62,10 +50,36 @@ const analysis = await gametime.live.nbaAnalysis({
       scoreDiff: { gte: -15, lte: -1 },
     },
   },
+  limits: {
+    maxGames: 5,
+    minStarts: 3,
+    maxStartsPerGame: 2,
+  },
   season: { year: 2025, type: 'REG' },
 });
+
+console.log('created situation id:', id);
+
 const summary = await gametime.situations.analysis(id, 'nba');
-const csv = await gametime.situations.exportCsv(id, 'nba');</code></pre>
+console.log(summary);
+
+const csv = await gametime.situations.exportCsv(id, 'nba');
+const fileName = \`austin-reaves-\${id}.csv\`;
+writeFileSync(fileName, csv, 'utf8');
+console.log('CSV saved:', fileName);</code></pre>
+
+  <p><strong>Live games &amp; analysis (soccer):</strong></p>
+  <pre><code>const games = await gametime.live.games('soccer');
+const analysis = await gametime.live.soccerAnalysis({
+  sportEventId: games[0].sportEventId,
+});</code></pre>
+
+  <p><strong>Live games &amp; analysis (NBA):</strong></p>
+  <pre><code>const games = await gametime.live.games('nba');
+const analysis = await gametime.live.nbaAnalysis({
+  sportEventId: games[0].sportEventId,
+  focusPlayerId: 'sr:player:123',
+});</code></pre>
 
   <p><strong>Custom base URL (e.g. localhost):</strong></p>
   <pre><code>import { createClient } from 'gametime-api-client';
