@@ -185,7 +185,7 @@ export function mapLiveEventSummaryToGameResponse(summary: LiveSportEventSummary
 function inferSoccerDelta(event: Record<string, unknown>): SituationStatLine {
   const type = (asString(event.type) ?? "").toLowerCase();
   const base = emptyStats(["goals", "assists", "shots", "yellowCards", "redCards", "substitutions"]);
-  if (type.includes("goal")) {
+  if (type.includes("goal") || type === "score_change") {
     base.goals = 1;
     base.shots = 1;
     return base;

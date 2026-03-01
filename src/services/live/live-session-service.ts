@@ -5,11 +5,13 @@ import {
   SportradarSoccerClient,
 } from "../../integrations/sportradar-soccer-client";
 import { OpenAiClient } from "../../integrations/openai-client";
-import { mapLiveEventSummaryToGameResponse } from "../adapters/soccer-adapter";
+import { mapLiveEventSummaryToGameResponse, SoccerAdapter } from "../adapters/soccer-adapter";
 import { CreateLiveSessionInput, InMemoryLiveSessionStore, LiveSession } from "./live-session-store";
 import { SportradarClient } from "../../integrations/sportradar-client";
 import { createConcurrencyLimiter } from "../../lib/concurrency-limiter";
 import { normalizePlayByPlay } from "../normalization";
+import { SituationStatLine } from "../../domain/situation";
+import { addStatLines, emptyStats } from "../adapters/stats";
 
 type StreamMessageType = "event" | "insight" | "narration" | "status" | "error";
 
@@ -38,6 +40,13 @@ export interface NbaLiveAnalysisRequest {
   verbosity?: "short" | "medium" | "high";
 }
 
+export interface SoccerLiveAnalysisRequest {
+  sportEventId: string;
+  focusPlayerId?: string;
+  focusPlayerName?: string;
+  verbosity?: "short" | "medium" | "high";
+}
+
 export class LiveSessionService {
   private readonly subscribersBySession = new Map<string, Set<Subscriber>>();
   private readonly timersBySession = new Map<string, NodeJS.Timeout>();
@@ -58,8 +67,19 @@ export class LiveSessionService {
 
   async getLiveGames(sport: "soccer" | "nba"): Promise<Array<Record<string, unknown>>> {
     if (sport === "nba") {
-      const games = await this.nbaClient.getDailyScheduleGames();
-      const inProgressGames = games.filter((game) => isNbaInProgress(game.status));
+      // Query adjacent UTC dates to avoid missing late local games near midnight UTC.
+      const dayOffsets = [-1, 0, 1];
+      const allGames = await Promise.all(dayOffsets.map(async (offset) => {
+        const date = new Date(Date.now() + (offset * 24 * 60 * 60 * 1000));
+        return this.nbaClient.getDailyScheduleGames(date);
+      }));
+      const uniqueByGameId = new Map<string, (typeof allGames)[number][number]>();
+      for (const games of allGames) {
+        for (const game of games) {
+          uniqueByGameId.set(game.gameId, game);
+        }
+      }
+      const inProgressGames = [...uniqueByGameId.values()].filter((game) => isNbaInProgress(game.status));
       const limit = createConcurrencyLimiter(3);
       const enriched = await Promise.all(inProgressGames.map((game) => limit(async () => {
         const payload = await this.nbaClient.getGamePlayByPlay(game.gameId);
@@ -78,7 +98,9 @@ export class LiveSessionService {
       return enriched;
     }
     const payload = await this.soccerClient.getLiveSchedules();
-    return extractLiveSportEvents(payload).map(mapLiveEventSummaryToGameResponse);
+    return extractLiveSportEvents(payload)
+      .filter((game) => isSoccerInProgress(game.status))
+      .map(mapLiveEventSummaryToGameResponse);
   }
 
   async getPlayersForGame(sportEventId: string, sport: "soccer" | "nba"): Promise<Array<Record<string, unknown>>> {
@@ -166,6 +188,104 @@ export class LiveSessionService {
         blendedPrediction: prediction,
         confidence,
       },
+      narration,
+    };
+  }
+
+  async analyzeSoccerPlayerLive(input: SoccerLiveAnalysisRequest): Promise<Record<string, unknown>> {
+    const timeline = await this.soccerClient.getSportEventTimeline(input.sportEventId);
+    const soccerAdapter = new SoccerAdapter(this.soccerClient);
+    const events = soccerAdapter.normalizeEvents(timeline, input.sportEventId);
+
+    const focus = resolveSoccerFocusPlayer(events, input.focusPlayerId, input.focusPlayerName)
+      ?? pickSoccerFocusPlayer(events);
+    if (!focus) {
+      throw new InvalidRequestError("Focus player not found in this live game.", {
+        sportEventId: input.sportEventId,
+        focusPlayerId: input.focusPlayerId,
+        focusPlayerName: input.focusPlayerName,
+      });
+    }
+
+    const currentTotals = accumulateSoccerPlayerTotals(events, focus.id, focus.name);
+    const elapsedMinutes = inferSoccerElapsedMinutes(events);
+    const matchEnded = isMatchEnded(timeline);
+
+    const projectedFinal = matchEnded
+      ? {
+          goals: currentTotals.goals ?? 0,
+          assists: currentTotals.assists ?? 0,
+          shots: currentTotals.shots ?? 0,
+          touches: currentTotals.touches ?? 0,
+        }
+      : {
+          goals: projectSoccerByPace(currentTotals.goals ?? 0, elapsedMinutes, 90),
+          assists: projectSoccerByPace(currentTotals.assists ?? 0, elapsedMinutes, 90),
+          shots: projectSoccerByPace(currentTotals.shots ?? 0, elapsedMinutes, 90),
+          touches: projectSoccerByPace(currentTotals.touches ?? 0, elapsedMinutes, 90),
+        };
+
+    const historical = await computeSoccerHistoricalAverages(
+      this.soccerClient,
+      input.sportEventId,
+      focus.id,
+      focus.name,
+      focus.teamId ?? null,
+      timeline,
+    );
+    const prediction = {
+      goals: blendProjection(projectedFinal.goals, historical.goals),
+      assists: blendProjection(projectedFinal.assists, historical.assists),
+      shots: blendProjection(projectedFinal.shots, historical.shots),
+      touches: blendProjection(projectedFinal.touches, historical.touches),
+    };
+    const confidence = historical.sampleSize >= 5 ? "medium" : "low";
+
+    let narration: Record<string, unknown>;
+    try {
+      const openAiNarration = await this.openAiClient.createNarration({
+        focusPlayer: focus.name,
+        verbosity: input.verbosity ?? "short",
+        context: [
+          `Soccer live analysis for ${focus.name}`,
+          `Current: goals ${currentTotals.goals ?? 0}, assists ${currentTotals.assists ?? 0}, shots ${currentTotals.shots ?? 0}, touches ${currentTotals.touches ?? 0}`,
+          `Projected final: goals ${projectedFinal.goals}, assists ${projectedFinal.assists}, shots ${projectedFinal.shots}, touches ${projectedFinal.touches}`,
+          `Historical per 90 (sample ${historical.sampleSize}): goals ${historical.goals}, assists ${historical.assists}, shots ${historical.shots}, touches ${historical.touches}`,
+        ].join("\n"),
+      });
+      narration = openAiNarration as unknown as Record<string, unknown>;
+    } catch (error) {
+      narration = {
+        narration: `Live analysis for ${focus.name}. OpenAI narration unavailable.`,
+        bullets: [],
+        callouts: [{ type: "warning", text: error instanceof Error ? error.message : "Narration unavailable" }],
+      };
+    }
+
+    return {
+      sport: "soccer",
+      sportEventId: input.sportEventId,
+      player: {
+        playerId: focus.id,
+        name: focus.name,
+        teamId: focus.teamId ?? null,
+      },
+      live: {
+        elapsedMinutes,
+        currentTotals: {
+          goals: currentTotals.goals ?? 0,
+          assists: currentTotals.assists ?? 0,
+          shots: currentTotals.shots ?? 0,
+          touches: currentTotals.touches ?? 0,
+        },
+      },
+      historical: { averages: historical },
+      prediction: {
+        projectedFinal,
+        blendedPrediction: prediction,
+        confidence,
+      },
+      matchEnded,
       narration,
     };
   }
@@ -822,7 +942,31 @@ function isNbaInProgress(status?: string): boolean {
     return false;
   }
   const normalized = status.trim().toLowerCase();
-  return normalized === "inprogress" || normalized === "in_progress" || normalized === "live";
+  return normalized === "inprogress"
+    || normalized === "in_progress"
+    || normalized === "live"
+    || normalized === "halftime";
+}
+
+function isSoccerInProgress(status?: string): boolean {
+  if (!status) {
+    return false;
+  }
+  const normalized = status.trim().toLowerCase();
+  if (
+    normalized.includes("ended")
+    || normalized.includes("closed")
+    || normalized.includes("complete")
+    || normalized.includes("finished")
+    || normalized === "not_started"
+    || normalized === "scheduled"
+    || normalized === "postponed"
+    || normalized === "cancelled"
+    || normalized === "abandoned"
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function extractNbaLiveAnalysis(payload: unknown): Record<string, unknown> {
@@ -1008,4 +1152,222 @@ function blendProjection(paceProjection: number, historicalAverage: number): num
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+// Soccer live analysis helpers
+type SoccerNormalizedEvent = {
+  actorPlayerId?: string;
+  actorPlayerName?: string;
+  playersInvolved?: string[];
+  minuteOrClock: number;
+  statsDelta?: { goals?: number; assists?: number; shots?: number; touches?: number };
+  teamId?: string;
+};
+
+function resolveSoccerFocusPlayer(
+  events: SoccerNormalizedEvent[],
+  focusPlayerId?: string,
+  focusPlayerName?: string,
+): { id: string; name: string; teamId?: string } | null {
+  const targetId = focusPlayerId?.trim();
+  const targetName = focusPlayerName?.trim().toLowerCase();
+  const idToName = new Map<string, string>();
+  const idToTeam = new Map<string, string>();
+  for (const event of events) {
+    if (event.actorPlayerId && event.actorPlayerName) {
+      idToName.set(event.actorPlayerId, event.actorPlayerName);
+      if (event.teamId) idToTeam.set(event.actorPlayerId, event.teamId);
+    }
+    for (const pid of event.playersInvolved ?? []) {
+      if (event.actorPlayerId === pid && event.actorPlayerName) {
+        idToName.set(pid, event.actorPlayerName);
+        if (event.teamId) idToTeam.set(pid, event.teamId);
+      }
+    }
+  }
+  if (targetId) {
+    const name = idToName.get(targetId) ?? focusPlayerName ?? "Unknown";
+    const teamId = idToTeam.get(targetId);
+    const found = events.some(
+      (e) =>
+        e.actorPlayerId === targetId || e.playersInvolved?.includes(targetId),
+    );
+    if (found) return { id: targetId, name, teamId };
+  }
+  if (targetName) {
+    for (const event of events) {
+      const actorName = event.actorPlayerName?.trim().toLowerCase();
+      if (actorName === targetName && event.actorPlayerId) {
+        return {
+          id: event.actorPlayerId,
+          name: event.actorPlayerName ?? "Unknown",
+          teamId: event.teamId,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function pickSoccerFocusPlayer(events: SoccerNormalizedEvent[]): { id: string; name: string; teamId?: string } | null {
+  const involvement = new Map<string, { touches: number; name?: string; teamId?: string }>();
+  for (const event of events) {
+    if (event.actorPlayerId) {
+      const current = involvement.get(event.actorPlayerId) ?? { touches: 0 };
+      involvement.set(event.actorPlayerId, {
+        touches: current.touches + 1,
+        name: event.actorPlayerName ?? current.name,
+        teamId: event.teamId ?? current.teamId,
+      });
+    }
+    for (const playerId of event.playersInvolved ?? []) {
+      const current = involvement.get(playerId) ?? { touches: 0 };
+      involvement.set(playerId, {
+        touches: current.touches + 1,
+        name: current.name,
+        teamId: event.teamId ?? current.teamId,
+      });
+    }
+  }
+  let best: { id: string; touches: number; name?: string; teamId?: string } | null = null;
+  for (const [id, row] of involvement.entries()) {
+    if (!best || row.touches > best.touches) {
+      best = { id, touches: row.touches, name: row.name, teamId: row.teamId };
+    }
+  }
+  if (!best) {
+    return null;
+  }
+  return {
+    id: best.id,
+    name: best.name ?? "Auto-selected focus player",
+    teamId: best.teamId,
+  };
+}
+
+function accumulateSoccerPlayerTotals(
+  events: SoccerNormalizedEvent[],
+  focusPlayerId: string,
+  focusPlayerName: string,
+): { goals: number; assists: number; shots: number; touches: number } {
+  let totals: SituationStatLine = emptyStats(["goals", "assists", "shots", "touches"]);
+  const targetName = focusPlayerName.trim().toLowerCase();
+  for (const event of events) {
+    const matches =
+      event.actorPlayerId === focusPlayerId ||
+      event.playersInvolved?.includes(focusPlayerId) ||
+      (!!event.actorPlayerName && event.actorPlayerName.trim().toLowerCase() === targetName);
+    if (matches) {
+      totals = addStatLines(
+        totals,
+        {
+          ...(event.statsDelta ?? {}),
+          touches: 1,
+        } as unknown as SituationStatLine,
+      );
+    }
+  }
+  return {
+    goals: totals.goals ?? 0,
+    assists: totals.assists ?? 0,
+    shots: totals.shots ?? 0,
+    touches: totals.touches ?? 0,
+  };
+}
+
+function inferSoccerElapsedMinutes(events: SoccerNormalizedEvent[]): number {
+  if (events.length === 0) return 1;
+  const maxMinute = Math.max(...events.map((e) => e.minuteOrClock ?? 0));
+  return Math.max(1, maxMinute);
+}
+
+function projectSoccerByPace(current: number, elapsedMinutes: number, gameMinutes: number): number {
+  const pace = current / Math.max(1, elapsedMinutes);
+  return round2(pace * gameMinutes);
+}
+
+function getTeamAbbreviationFromTimeline(payload: unknown, teamId: string): string | null {
+  const root = asObject(payload);
+  const sportEvent = asObject(root.sport_event);
+  const competitors = asArray(sportEvent.competitors) ?? [];
+  for (const c of competitors) {
+    const row = asObject(c);
+    if (asString(row.id) === teamId) {
+      return asString(row.abbreviation) ?? asString(row.name) ?? null;
+    }
+  }
+  return null;
+}
+
+async function computeSoccerHistoricalAverages(
+  soccerClient: SportradarSoccerClient,
+  currentGameId: string,
+  playerId: string,
+  playerName: string,
+  teamId: string | null,
+  timelinePayload: unknown,
+): Promise<{ goals: number; assists: number; shots: number; touches: number; sampleSize: number }> {
+  if (!teamId) {
+    return { goals: 0, assists: 0, shots: 0, touches: 0, sampleSize: 0 };
+  }
+  const teamAbbr = getTeamAbbreviationFromTimeline(timelinePayload, teamId);
+  if (!teamAbbr) {
+    return { goals: 0, assists: 0, shots: 0, touches: 0, sampleSize: 0 };
+  }
+  const inputs = {
+    sport: "soccer" as const,
+    player: { name: playerName, team: teamAbbr },
+    filters: {
+      soccer: {
+        half: 2 as const,
+        minuteRange: { gte: 0, lte: 90 },
+        scoreState: "drawing" as const,
+        goalDiffRange: { gte: -10, lte: 10 },
+      },
+    },
+    limits: { maxGames: 6, minStarts: 1, maxStartsPerGame: 1 },
+  };
+  let gameIds: string[];
+  try {
+    gameIds = await soccerClient.getHistoricalGameIds(inputs, 6);
+  } catch {
+    return { goals: 0, assists: 0, shots: 0, touches: 0, sampleSize: 0 };
+  }
+  gameIds = gameIds.filter((id) => id !== currentGameId).slice(0, 6);
+  const soccerAdapter = new SoccerAdapter(soccerClient);
+  const limit = createConcurrencyLimiter(2);
+  const settled = await Promise.all(
+    gameIds.map((gameId) =>
+      limit(async () => {
+        try {
+          const raw = await soccerClient.getSportEventTimeline(gameId);
+          const evts = soccerAdapter.normalizeEvents(raw, gameId);
+          return accumulateSoccerPlayerTotals(evts as SoccerNormalizedEvent[], playerId, playerName);
+        } catch {
+          return null;
+        }
+      }),
+    ),
+  );
+  const results = settled.filter((x): x is { goals: number; assists: number; shots: number; touches: number } => x != null);
+  if (results.length === 0) {
+    return { goals: 0, assists: 0, shots: 0, touches: 0, sampleSize: 0 };
+  }
+  const totals = results.reduce(
+    (acc, r) => ({
+      goals: acc.goals + r.goals,
+      assists: acc.assists + r.assists,
+      shots: acc.shots + r.shots,
+      touches: acc.touches + r.touches,
+    }),
+    { goals: 0, assists: 0, shots: 0, touches: 0 },
+  );
+  const n = results.length;
+  return {
+    goals: round2(totals.goals / n),
+    assists: round2(totals.assists / n),
+    shots: round2(totals.shots / n),
+    touches: round2(totals.touches / n),
+    sampleSize: n,
+  };
 }

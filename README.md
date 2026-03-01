@@ -110,6 +110,21 @@ curl "http://localhost:3000/v1/live/games?sport=soccer"
 curl "http://localhost:3000/v1/live/games/<sportEventId>/players?sport=soccer"
 ```
 
+### 2b) Soccer Live Player Analysis
+
+Get projected goals, assists, and shots for a focus player (mirrors NBA analysis):
+
+```bash
+curl -X POST "http://localhost:3000/v1/live/soccer/analysis" \
+  -H "content-type: application/json" \
+  -d '{
+    "sportEventId": "sr:sport_event:66000372",
+    "focusPlayerId": "sr:player:1957599"
+  }'
+```
+
+Response includes `currentTotals`, `projectedFinal`, `blendedPrediction`, and optional `historical` averages. NBA has a similar endpoint: `POST /v1/live/nba/analysis`.
+
 ### 3) Start a Live Session
 
 ```bash

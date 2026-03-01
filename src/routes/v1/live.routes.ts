@@ -1,5 +1,10 @@
 import { FastifyInstance } from "fastify";
-import { CreateSessionRequest, LiveSessionService, NbaLiveAnalysisRequest } from "../../services/live/live-session-service";
+import {
+  CreateSessionRequest,
+  LiveSessionService,
+  NbaLiveAnalysisRequest,
+  SoccerLiveAnalysisRequest,
+} from "../../services/live/live-session-service";
 
 interface LiveRoutesDeps {
   liveSessionService: LiveSessionService;
@@ -99,6 +104,28 @@ export async function registerLiveRoutes(app: FastifyInstance, deps: LiveRoutesD
     },
     async (request) => {
       return deps.liveSessionService.analyzeNbaPlayerLive(request.body);
+    },
+  );
+
+  app.post<{ Body: SoccerLiveAnalysisRequest }>(
+    "/v1/live/soccer/analysis",
+    {
+      schema: {
+        body: {
+          type: "object",
+          additionalProperties: false,
+          required: ["sportEventId"],
+          properties: {
+            sportEventId: { type: "string", minLength: 1 },
+            focusPlayerId: { type: "string", minLength: 1 },
+            focusPlayerName: { type: "string", minLength: 1 },
+            verbosity: { type: "string", enum: ["short", "medium", "high"] },
+          },
+        },
+      },
+    },
+    async (request) => {
+      return deps.liveSessionService.analyzeSoccerPlayerLive(request.body);
     },
   );
 

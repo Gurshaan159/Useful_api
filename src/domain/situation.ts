@@ -77,6 +77,7 @@ export interface SituationStatLine {
   goals?: number;
   assists?: number;
   shots?: number;
+  touches?: number;
   yellowCards?: number;
   redCards?: number;
   substitutions?: number;
