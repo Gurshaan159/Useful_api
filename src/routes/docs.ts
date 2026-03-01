@@ -83,25 +83,12 @@ console.log('CSV saved:', fileName);</code></pre>
 
   <h2>Examples</h2>
   <p><strong>Live soccer analysis:</strong></p>
+  <p>1. Get live soccer games:</p>
+  <pre><code>curl "https://gametimeapi.onrender.com/v1/live/games?sport=soccer"</code></pre>
+  <p>2. Pick a <code>sportEventId</code> from the response, then run analysis (focus player is auto-selected):</p>
   <pre><code>curl -X POST "https://gametimeapi.onrender.com/v1/live/soccer/analysis" \\
   -H "content-type: application/json" \\
-  -d '{"sportEventId": "sr:sport_event:66000372", "focusPlayerId": "sr:player:1957599"}'</code></pre>
-
-  <p><strong>Create situation (e.g. LeBron, 4th quarter, down 1–15):</strong></p>
-  <pre><code>curl -X POST "https://gametimeapi.onrender.com/v1/situations" \\
-  -H "content-type: application/json" \\
-  -d '{
-    "sport": "nba",
-    "player": { "name": "LeBron James", "team": "LAL" },
-    "filters": {
-      "nba": {
-        "quarter": 4,
-        "timeRemainingSeconds": { "gte": 0, "lte": 720 },
-        "scoreDiff": { "gte": -15, "lte": -1 }
-      }
-    },
-    "season": { "year": 2025, "type": "REG" }
-  }'</code></pre>
+  -d '{"sportEventId": "sr:sport_event:&lt;id&gt;"}'</code></pre>
 
   <h2>WebSocket live stream</h2>
   <p>Create a session, then connect to the stream to receive real-time events (goals, shots, insights, AI narration).</p>
