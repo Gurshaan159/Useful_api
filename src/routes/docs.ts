@@ -28,10 +28,50 @@ export async function registerDocsRoute(app: FastifyInstance): Promise<void> {
   <p>Live sports data, player predictions, and historical situation analysis for NBA &amp; Soccer.</p>
   <ul>
     <li><strong>Base URL:</strong> <code>https://gametimeapi.onrender.com</code></li>
-    <li><strong>SDK:</strong> <code>npm install gametime-api-client</code></li>
+    <li><strong>npm:</strong> <a href="https://www.npmjs.com/package/gametime-api-client">gametime-api-client</a></li>
   </ul>
 
-  <h2>Quick Start (cURL)</h2>
+  <h2>SDK for Developers</h2>
+  <p><strong>Install:</strong></p>
+  <pre><code>npm install gametime-api-client</code></pre>
+
+  <p><strong>Quick Start:</strong></p>
+  <pre><code>import { gametime } from 'gametime-api-client';
+
+const games = await gametime.live.games('soccer');
+const analysis = await gametime.live.soccerAnalysis({
+  sportEventId: games[0].sportEventId,
+});
+console.log(analysis.prediction.projectedFinal);</code></pre>
+
+  <p><strong>NBA example:</strong></p>
+  <pre><code>const games = await gametime.live.games('nba');
+const analysis = await gametime.live.nbaAnalysis({
+  sportEventId: games[0].sportEventId,
+  focusPlayerId: 'sr:player:123',
+});</code></pre>
+
+  <p><strong>Situations (historical stats):</strong></p>
+  <pre><code>const { id } = await gametime.situations.create({
+  sport: 'nba',
+  player: { name: 'LeBron James', team: 'LAL' },
+  filters: {
+    nba: {
+      quarter: 4,
+      timeRemainingSeconds: { gte: 0, lte: 720 },
+      scoreDiff: { gte: -15, lte: -1 },
+    },
+  },
+  season: { year: 2025, type: 'REG' },
+});
+const summary = await gametime.situations.analysis(id, 'nba');
+const csv = await gametime.situations.exportCsv(id, 'nba');</code></pre>
+
+  <p><strong>Custom base URL (e.g. localhost):</strong></p>
+  <pre><code>import { createClient } from 'gametime-api-client';
+const api = createClient({ baseUrl: 'http://localhost:3000' });</code></pre>
+
+  <h2>cURL Quick Start</h2>
   <pre><code>curl "https://gametimeapi.onrender.com/v1/live/games?sport=soccer"</code></pre>
 
   <h2>Endpoints</h2>
