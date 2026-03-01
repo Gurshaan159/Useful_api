@@ -68,26 +68,6 @@ const fileName = \`austin-reaves-\${id}.csv\`;
 writeFileSync(fileName, csv, 'utf8');
 console.log('CSV saved:', fileName);</code></pre>
 
-  <p><strong>Live games &amp; analysis (soccer):</strong></p>
-  <pre><code>const games = await gametime.live.games('soccer');
-const analysis = await gametime.live.soccerAnalysis({
-  sportEventId: games[0].sportEventId,
-});</code></pre>
-
-  <p><strong>Live games &amp; analysis (NBA):</strong></p>
-  <pre><code>const games = await gametime.live.games('nba');
-const analysis = await gametime.live.nbaAnalysis({
-  sportEventId: games[0].sportEventId,
-  focusPlayerId: 'sr:player:123',
-});</code></pre>
-
-  <p><strong>Custom base URL (e.g. localhost):</strong></p>
-  <pre><code>import { createClient } from 'gametime-api-client';
-const api = createClient({ baseUrl: 'http://localhost:3000' });</code></pre>
-
-  <h2>cURL Quick Start</h2>
-  <pre><code>curl "https://gametimeapi.onrender.com/v1/live/games?sport=soccer"</code></pre>
-
   <h2>Endpoints</h2>
   <table>
     <tr><th>Method</th><th>Path</th><th>Description</th></tr>
