@@ -16,6 +16,7 @@ import { NbaAdapter } from "./services/adapters/nba-adapter";
 import { SoccerAdapter } from "./services/adapters/soccer-adapter";
 import { AdapterRegistry } from "./services/adapters/adapter-registry";
 import { registerLiveRoutes } from "./routes/v1/live.routes";
+import { registerDocsRoute } from "./routes/docs";
 import { InMemoryLiveSessionStore } from "./services/live/live-session-store";
 import { LiveSessionService } from "./services/live/live-session-service";
 import { OpenAiClient } from "./integrations/openai-client";
@@ -31,6 +32,7 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   const app = Fastify({ logger: true });
   await app.register(websocket);
   await app.register(errorHandlerPlugin);
+  await registerDocsRoute(app);
 
   const config = getConfig();
   const scheduleCache = new ScheduleCache();

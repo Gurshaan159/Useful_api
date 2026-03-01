@@ -1,13 +1,27 @@
-## GAMETIME.API
-Fastify + TypeScript API for:
-- historical situation analysis (`nba` and `soccer`)
-- analysis retrieval + CSV export from stored situations
-- live soccer demo flows with REST + WebSocket streaming
+# Gametime API
 
-## JavaScript Client (SDK)
+**Live sports data, player predictions, and historical situation analysis for NBA & Soccer.**  
+A REST + WebSocket API built for clarity, predictable behavior, and developer experience.
 
-For a better developer experience, use the typed JavaScript client:
+- **Hosted API:** https://gametimeapi.onrender.com  
+- **SDK:** `gametime-api-client` ([npm](https://www.npmjs.com/package/gametime-api-client))  
+- **Documentation:** [Hosted docs](https://gametimeapi.onrender.com/docs) | [sdk/README.md](sdk/README.md)
 
+---
+
+## Quick Start (cURL)
+
+**Localhost:**
+```bash
+curl "http://localhost:3000/v1/live/games?sport=soccer"
+```
+
+**Public API:**
+```bash
+curl "https://gametimeapi.onrender.com/v1/live/games?sport=soccer"
+```
+
+**JavaScript SDK:**
 ```bash
 npm install gametime-api-client
 ```
@@ -17,57 +31,181 @@ import { gametime } from 'gametime-api-client';
 
 const games = await gametime.live.games('soccer');
 const analysis = await gametime.live.soccerAnalysis({ sportEventId: games[0].sportEventId });
+console.log(analysis.prediction.projectedFinal); // { goals, assists, shots, touches }
 ```
 
-See [sdk/README.md](sdk/README.md) for full usage and API reference.
+See [sdk/README.md](sdk/README.md) for full SDK usage.
 
-## Setup
+---
+
+## Submission Requirements (HackIllinois Best Web API Track)
+
+| Requirement | Status |
+|-------------|--------|
+| API with valuable endpoints | ✅ Live games, analysis, situations, WebSocket streaming |
+| Queryable over HTTP | ✅ REST (`GET`/`POST`) + WebSocket |
+| cURL/Postman usable | ✅ All endpoints documented with curl examples |
+| Operational on localhost | ✅ `npm run dev` → `http://localhost:3000` |
+| Documentation in README | ✅ This file + [hosted docs](https://gametimeapi.onrender.com/docs) |
+| **Bonus:** Publicly accessible | ✅ https://gametimeapi.onrender.com |
+| **Bonus:** Hosted documentation | ✅ https://gametimeapi.onrender.com/docs |
+| **Bonus:** Methods beyond GET | ✅ POST for situations, analysis, sessions |
+| **Bonus:** Stateful usage | ✅ Create situations, live sessions; retrieve by ID |
+
+---
+
+## API Endpoints
+
+Base URL: `https://gametimeapi.onrender.com` (or `http://localhost:3000` locally)
+
+### Live
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/v1/live/games?sport=soccer\|nba` | List in-progress live games |
+| GET | `/v1/live/games/:sportEventId/players?sport=soccer\|nba` | List players for a game |
+| POST | `/v1/live/soccer/analysis` | Soccer player prediction (goals, assists, shots, touches) |
+| POST | `/v1/live/nba/analysis` | NBA player prediction analysis |
+| POST | `/v1/live/sessions` | Create live session (WebSocket) |
+| GET | `/v1/live/sessions/:id` | Get session status |
+
+### Situations (Historical Stats)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/situations` | Create situation (player + filters + season) |
+| GET | `/v1/situations/:id/analysis?sport=nba\|soccer` | Get analysis (totals, per-start) |
+| GET | `/v1/situations/:id/export.csv?sport=nba\|soccer` | Export stats as CSV |
+
+---
+
+## cURL Examples
+
+### 1. Get live soccer games
+```bash
+curl "https://gametimeapi.onrender.com/v1/live/games?sport=soccer"
+```
+
+### 2. Get players in a game
+```bash
+curl "https://gametimeapi.onrender.com/v1/live/games/sr:sport_event:66000372/players?sport=soccer"
+```
+
+### 3. Soccer live analysis (POST)
+```bash
+curl -X POST "https://gametimeapi.onrender.com/v1/live/soccer/analysis" \
+  -H "content-type: application/json" \
+  -d '{"sportEventId": "sr:sport_event:66000372", "focusPlayerId": "sr:player:1957599"}'
+```
+
+### 4. NBA live analysis (POST)
+```bash
+curl -X POST "https://gametimeapi.onrender.com/v1/live/nba/analysis" \
+  -H "content-type: application/json" \
+  -d '{"sportEventId": "sr:sport_event:123", "focusPlayerId": "sr:player:456"}'
+```
+
+### 5. Create situation (POST) – e.g. LeBron James, 4th quarter, down 1–15
+```bash
+curl -X POST "https://gametimeapi.onrender.com/v1/situations" \
+  -H "content-type: application/json" \
+  -d '{
+    "sport": "nba",
+    "player": { "name": "LeBron James", "team": "LAL" },
+    "filters": {
+      "nba": {
+        "quarter": 4,
+        "timeRemainingSeconds": { "gte": 0, "lte": 720 },
+        "scoreDiff": { "gte": -15, "lte": -1 }
+      }
+    },
+    "season": { "year": 2025, "type": "REG" }
+  }'
+```
+
+### 6. Get situation analysis (GET)
+```bash
+curl "https://gametimeapi.onrender.com/v1/situations/sit_<id>/analysis?sport=nba"
+```
+
+### 7. Export situation CSV (GET)
+```bash
+curl "https://gametimeapi.onrender.com/v1/situations/sit_<id>/export.csv?sport=nba"
+```
+
+### 8. Create live session (POST)
+```bash
+curl -X POST "https://gametimeapi.onrender.com/v1/live/sessions" \
+  -H "content-type: application/json" \
+  -d '{
+    "sport": "soccer",
+    "sportEventId": "sr:sport_event:66000372",
+    "focusPlayerId": "sr:player:1957599",
+    "preferences": { "verbosity": "short" }
+  }'
+```
+
+### 9. WebSocket stream
+```bash
+npx wscat -c "wss://gametimeapi.onrender.com/v1/live/sessions/<sessionId>/stream"
+```
+
+---
+
+## Error Handling & Status Codes
+
+The API returns structured error responses and appropriate HTTP status codes:
+
+| Status | Meaning |
+|--------|---------|
+| 200 | Success |
+| 404 | Resource not found (e.g. invalid situation/session ID) |
+| 409 | Ambiguous player (multiple matches; disambiguate) |
+| 422 | Invalid request (validation, range errors) |
+| 502 | Upstream error (provider returned non-success) |
+| 504 | Upstream timeout |
+
+Example error body:
+```json
+{
+  "error": {
+    "code": "UPSTREAM_ERROR",
+    "message": "Sportradar soccer returned non-success status.",
+    "details": { "provider": "sportradar-soccer", "operation": "getLiveSchedules", "status": 403 },
+    "requestId": "req-1"
+  }
+}
+```
+
+---
+
+## Tech Stack
+
+- **Runtime:** Node.js  
+- **Framework:** [Fastify](https://fastify.dev)  
+- **Language:** TypeScript  
+- **Upstream data:** Sportradar (NBA + Soccer), OpenAI (narration)  
+- **Deploy:** Render (public URL)  
+- **SDK:** `gametime-api-client` (npm, ESM)
+
+---
+
+## Setup (Local)
 
 ```bash
 npm install
 cp .env.example .env
+# Add SPORTRADAR_SOCCER_API_KEY, SPORTRADAR_NBA_API_KEY, OPENAI_API_KEY to .env
 npm run dev
 ```
 
-## Required API Keys
+Server runs at `http://localhost:3000`.
 
-Create `.env` in the project root with:
+---
 
-```env
-PORT=3000
+## Situation Schemas
 
-# Sportradar Soccer (live + soccer historical)
-SPORTRADAR_SOCCER_API_KEY=your_sportradar_soccer_key
-SPORTRADAR_SOCCER_ACCESS_LEVEL=trial
-SPORTRADAR_SOCCER_LANGUAGE_CODE=en
-SPORTRADAR_SOCCER_FORMAT=json
-
-# Sportradar NBA (existing NBA support)
-SPORTRADAR_NBA_API_KEY=your_sportradar_nba_key
-SPORTRADAR_NBA_BASE_URL=https://api.sportradar.com/nba/trial/v7/en
-SPORTRADAR_RETRY_MAX_ATTEMPTS=5
-SPORTRADAR_RETRY_BASE_DELAY_MS=600
-SPORTRADAR_RETRY_MAX_DELAY_MS=15000
-SITUATION_PBP_MAX_CONCURRENCY=2
-
-# OpenAI narration
-OPENAI_API_KEY=your_openai_key
-OPENAI_MODEL=gpt-5.2-mini
-```
-
-Keys to acquire:
-- Sportradar Soccer v4 + Soccer Extended v4 API key
-- Sportradar NBA API key (if keeping NBA mode enabled)
-- OpenAI API key (Responses API)
-
-## Existing Endpoints (Now Sport-Aware)
-
-### Create Situation
-
-`POST /v1/situations`
-
-NBA payload (new schema):
-
+### NBA
 ```json
 {
   "sport": "nba",
@@ -83,8 +221,7 @@ NBA payload (new schema):
 }
 ```
 
-Soccer payload:
-
+### Soccer
 ```json
 {
   "sport": "soccer",
@@ -101,136 +238,16 @@ Soccer payload:
 }
 ```
 
-Response:
-
-```json
-{ "id": "sit_<uuid>", "gamesScanned": 30, "gamesUsed": 12 }
-```
-
-### Analysis
-
-`GET /v1/situations/:id/analysis?sport=nba|soccer`
-
-### CSV Export
-
-`GET /v1/situations/:id/export.csv?sport=nba|soccer`
-
-The API serves both endpoints from stored canonical situation data (no upstream refetch).
-
-## Live Soccer Demo Flow
-
-### 1) Get Live Games
-
-```bash
-curl "http://localhost:3000/v1/live/games?sport=soccer"
-```
-
-### 2) Get Players in a Live Game
-
-```bash
-curl "http://localhost:3000/v1/live/games/<sportEventId>/players?sport=soccer"
-```
-
-### 2b) Soccer Live Player Analysis
-
-Get projected goals, assists, and shots for a focus player (mirrors NBA analysis):
-
-```bash
-curl -X POST "http://localhost:3000/v1/live/soccer/analysis" \
-  -H "content-type: application/json" \
-  -d '{
-    "sportEventId": "sr:sport_event:66000372",
-    "focusPlayerId": "sr:player:1957599"
-  }'
-```
-
-Response includes `currentTotals`, `projectedFinal`, `blendedPrediction`, and optional `historical` averages. NBA has a similar endpoint: `POST /v1/live/nba/analysis`.
-
-### 3) Start a Live Session
-
-```bash
-curl -X POST "http://localhost:3000/v1/live/sessions" \
-  -H "content-type: application/json" \
-  -d '{
-    "sport": "soccer",
-    "sportEventId": "sr:sport_event:123",
-    "focusPlayerId": "sr:player:456",
-    "preferences": { "verbosity": "short" }
-  }'
-```
-
-Response:
-
-```json
-{ "id": "sess_<uuid>" }
-```
-
-### 4) Connect WebSocket Stream
-
-Use any WS client (example with `wscat`):
-
-```bash
-npx wscat -c "ws://localhost:3000/v1/live/sessions/<sessionId>/stream"
-```
-
-Message envelope:
-
-```json
-{
-  "type": "event | insight | narration | status | error",
-  "ts": "2026-02-28T12:00:00.000Z",
-  "data": {}
-}
-```
-
-Example messages:
-
-```json
-{
-  "type": "event",
-  "ts": "2026-02-28T12:00:00.000Z",
-  "data": {
-    "minute": 67,
-    "eventType": "goal",
-    "description": "Goal by ...",
-    "team": "Manchester City",
-    "playersInvolved": ["sr:player:456"],
-    "scoreSnapshot": "1-0",
-    "focusPlayerInvolved": true
-  }
-}
-```
-
-```json
-{
-  "type": "insight",
-  "ts": "2026-02-28T12:00:10.000Z",
-  "data": {
-    "similarMatches": [{ "sportEventId": "sr:sport_event:999", "distance": 0.25 }],
-    "trends": { "nextGoalIn10MinChance": 0.42, "focusPlayerSubChance": 0.22 },
-    "confidence": "med"
-  }
-}
-```
-
-```json
-{
-  "type": "narration",
-  "ts": "2026-02-28T12:00:20.000Z",
-  "data": {
-    "narration": "City are pressing with sustained momentum...",
-    "bullets": ["Goal raised pressure", "Sub risk remains moderate"],
-    "callouts": [{ "type": "trend", "text": "Next-goal probability is elevated." }]
-  }
-}
-```
+---
 
 ## Docker
 
 ```bash
-docker build -t useful-api .
-docker run --rm -p 3000:3000 --env-file .env useful-api
+docker build -t gametime-api .
+docker run --rm -p 3000:3000 --env-file .env gametime-api
 ```
+
+---
 
 ## Testing
 
@@ -239,16 +256,10 @@ npm test
 npm run build
 ```
 
-## MVP Persistence Note
+---
 
-Current storage is in-memory for demo simplicity.
+## Rate Limits & Resilience
 
-TODO:
-- move situations + live sessions to Redis/Postgres for production durability
-- add distributed pub/sub for multi-instance websocket fanout
-
-## Rate-limit resilience notes
-
-- `POST /v1/situations` now retries transient Sportradar failures (`429` and `5xx`) with exponential backoff.
-- The server also limits concurrent NBA play-by-play fetches to reduce burst pressure on upstream APIs.
-- Under heavy provider throttling, situation creation can take longer but should fail less often.
+- `POST /v1/situations` retries Sportradar `429` and `5xx` with exponential backoff.
+- NBA play-by-play fetches are concurrency-limited to reduce upstream pressure.
+- Under heavy provider throttling, situation creation may take longer but should fail less often.
