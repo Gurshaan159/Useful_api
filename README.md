@@ -4,6 +4,23 @@ Fastify + TypeScript API for:
 - analysis retrieval + CSV export from stored situations
 - live soccer demo flows with REST + WebSocket streaming
 
+## JavaScript Client (SDK)
+
+For a better developer experience, use the typed JavaScript client:
+
+```bash
+npm install gametime-api-client
+```
+
+```js
+import { gametime } from 'gametime-api-client';
+
+const games = await gametime.live.games('soccer');
+const analysis = await gametime.live.soccerAnalysis({ sportEventId: games[0].sportEventId });
+```
+
+See [sdk/README.md](sdk/README.md) for full usage and API reference.
+
 ## Setup
 
 ```bash

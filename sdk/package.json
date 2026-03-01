@@ -1,0 +1,26 @@
+{
+  "name": "gametime-api-client",
+  "version": "1.0.0",
+  "description": "JavaScript client for Gametime API - live sports data, player analysis, and predictions",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["gametime", "sports", "api", "nba", "soccer", "live", "prediction"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
