@@ -27,7 +27,7 @@ export async function registerDocsRoute(app: FastifyInstance): Promise<void> {
   <h1>Gametime API</h1>
   <p>Live sports data, player predictions, and historical situation analysis for NBA &amp; Soccer.</p>
   <ul>
-    <li><strong>Base URL:</strong> <code>https://gametimeapi.onrender.com</code></li>
+    <li><strong>Base URL:</strong> <code>https://gametimeapi-8m0b.onrender.com</code></li>
     <li><strong>npm:</strong> <a href="https://www.npmjs.com/package/gametime-api-client">gametime-api-client</a></li>
   </ul>
 
@@ -84,25 +84,21 @@ console.log('CSV saved:', fileName);</code></pre>
   <h2>Examples</h2>
   <p><strong>Live soccer analysis:</strong></p>
   <p>1. Get live soccer games:</p>
-  <pre><code>curl "https://gametimeapi.onrender.com/v1/live/games?sport=soccer"</code></pre>
+  <pre><code>curl "https://gametimeapi-8m0b.onrender.com/v1/live/games?sport=soccer"</code></pre>
   <p>2. Pick a <code>sportEventId</code> from the response, then run analysis (focus player is auto-selected):</p>
-  <pre><code>curl -X POST "https://gametimeapi.onrender.com/v1/live/soccer/analysis" \\
+  <pre><code>curl -X POST "https://gametimeapi-8m0b.onrender.com/v1/live/soccer/analysis" \\
   -H "content-type: application/json" \\
   -d '{"sportEventId": "sr:sport_event:&lt;id&gt;"}'</code></pre>
-
-  <h2>WebSocket live stream</h2>
-  <p>Create a session, then connect to the stream to receive real-time events (goals, shots, insights, AI narration).</p>
-  <p><strong>1. Create a live session:</strong></p>
-  <pre><code>curl -X POST "https://gametimeapi.onrender.com/v1/live/sessions" \\
+  <p>3. Start a WebSocket session with the same <code>sportEventId</code> (copy the returned <code>id</code>):</p>
+  <pre><code>curl -X POST "https://gametimeapi-8m0b.onrender.com/v1/live/sessions" \\
   -H "content-type: application/json" \\
   -d '{
     "sport": "soccer",
-    "sportEventId": "sr:sport_event:61853276"
+    "sportEventId": "sr:sport_event:&lt;id&gt;"
   }'</code></pre>
-  <p>Response: <code>{"id": "sess_abc123..."}</code>. Use this <code>id</code> in step 2.</p>
-  <p><strong>2. Connect to the WebSocket stream:</strong></p>
-  <pre><code>npx wscat -c "wss://gametimeapi.onrender.com/v1/live/sessions/&lt;sessionId&gt;/stream"</code></pre>
-  <p>Replace <code>&lt;sessionId&gt;</code> with the <code>id</code> from step 1 (e.g. <code>sess_c56d48c8-b5f0-4f8d-86c0-3121ad9351a3</code>). For localhost, use <code>ws://localhost:3000/v1/live/sessions/&lt;sessionId&gt;/stream</code>.</p>
+  <p>4. Connect to the WebSocket stream using that <code>id</code>:</p>
+  <pre><code>npx wscat -c "wss://gametimeapi-8m0b.onrender.com/v1/live/sessions/&lt;sessionId&gt;/stream"</code></pre>
+  <p>Replace <code>&lt;sessionId&gt;</code> with the <code>id</code> returned by step 3 (example: <code>sess_c56d48c8-b5f0-4f8d-86c0-3121ad9351a3</code>).</p>
 
   <h2>Error Codes</h2>
   <p>200 Success | 404 Not Found | 409 Ambiguous Player | 422 Invalid Request | 502 Upstream Error | 504 Timeout</p>
