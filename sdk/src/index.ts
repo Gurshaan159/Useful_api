@@ -32,6 +32,18 @@ class ApiError extends Error {
   }
 }
 
+interface RetryOptions {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+}
+
+const CREATE_SITUATION_RETRY: Required<RetryOptions> = {
+  maxAttempts: 5,
+  baseDelayMs: 600,
+  maxDelayMs: 12_000,
+};
+
 async function request<T>(
   baseUrl: string,
   path: string,
@@ -53,6 +65,29 @@ async function request<T>(
     );
   }
   return body as T;
+}
+
+async function requestWithRetry<T>(
+  run: () => Promise<T>,
+  shouldRetry: (error: unknown) => boolean,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxAttempts = sanitizePositiveInt(options.maxAttempts, CREATE_SITUATION_RETRY.maxAttempts);
+  const baseDelayMs = sanitizePositiveInt(options.baseDelayMs, CREATE_SITUATION_RETRY.baseDelayMs);
+  const maxDelayMs = sanitizePositiveInt(options.maxDelayMs, CREATE_SITUATION_RETRY.maxDelayMs);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (!shouldRetry(error) || attempt >= maxAttempts) {
+        throw error;
+      }
+      await sleep(calculateBackoffDelay(attempt, baseDelayMs, maxDelayMs));
+    }
+  }
+  throw lastError;
 }
 
 function get<T>(baseUrl: string, path: string): Promise<T> {
@@ -260,7 +295,10 @@ export function createClient(options: ClientOptions = {}): { live: LiveApi; situ
 
   const situations: SituationsApi = {
     create(params) {
-      return post<CreateSituationResponse>(baseUrl, "/v1/situations", params);
+      return requestWithRetry(
+        () => post<CreateSituationResponse>(baseUrl, "/v1/situations", params),
+        isRetryableCreateSituationError
+      );
     },
 
     analysis(id, sport) {
@@ -281,3 +319,32 @@ export function createClient(options: ClientOptions = {}): { live: LiveApi; situ
 export const gametime = createClient();
 
 export { ApiError };
+
+function isRetryableCreateSituationError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) {
+    return false;
+  }
+  const status = error.status;
+  if (status === 429 || status === 502 || status === 503 || status === 504) {
+    return true;
+  }
+  const upstreamStatus = (error.details as { status?: unknown } | undefined)?.status;
+  return upstreamStatus === 429;
+}
+
+function calculateBackoffDelay(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
+  const exponential = Math.min(maxDelayMs, baseDelayMs * (2 ** (attempt - 1)));
+  const jitter = Math.floor(Math.random() * Math.min(250, Math.max(1, Math.floor(exponential * 0.25))));
+  return Math.min(maxDelayMs, exponential + jitter);
+}
+
+function sanitizePositiveInt(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

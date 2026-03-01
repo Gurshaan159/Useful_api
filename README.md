@@ -45,6 +45,10 @@ SPORTRADAR_SOCCER_FORMAT=json
 # Sportradar NBA (existing NBA support)
 SPORTRADAR_NBA_API_KEY=your_sportradar_nba_key
 SPORTRADAR_NBA_BASE_URL=https://api.sportradar.com/nba/trial/v7/en
+SPORTRADAR_RETRY_MAX_ATTEMPTS=5
+SPORTRADAR_RETRY_BASE_DELAY_MS=600
+SPORTRADAR_RETRY_MAX_DELAY_MS=15000
+SITUATION_PBP_MAX_CONCURRENCY=2
 
 # OpenAI narration
 OPENAI_API_KEY=your_openai_key
@@ -242,3 +246,9 @@ Current storage is in-memory for demo simplicity.
 TODO:
 - move situations + live sessions to Redis/Postgres for production durability
 - add distributed pub/sub for multi-instance websocket fanout
+
+## Rate-limit resilience notes
+
+- `POST /v1/situations` now retries transient Sportradar failures (`429` and `5xx`) with exponential backoff.
+- The server also limits concurrent NBA play-by-play fetches to reduce burst pressure on upstream APIs.
+- Under heavy provider throttling, situation creation can take longer but should fail less often.

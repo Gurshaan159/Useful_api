@@ -19,6 +19,7 @@ interface SituationBuilderDeps {
   adapterRegistry?: AdapterRegistry;
   sportAdapters?: SportAdapter[];
   sportradarClient?: any;
+  pbpMaxConcurrency?: number;
   now?: () => Date;
   idFactory?: () => string;
 }
@@ -29,6 +30,8 @@ export class SituationBuilder {
   private readonly now: () => Date;
 
   private readonly idFactory: () => string;
+
+  private readonly pbpMaxConcurrency: number;
 
   constructor(deps: SituationBuilderDeps) {
     if (deps.adapterRegistry) {
@@ -42,6 +45,7 @@ export class SituationBuilder {
     }
     this.now = deps.now ?? (() => new Date());
     this.idFactory = deps.idFactory ?? (() => `sit_${randomUUID()}`);
+    this.pbpMaxConcurrency = sanitizePositiveInt(deps.pbpMaxConcurrency, 2);
   }
 
   async build(rawInputs: SituationInputs): Promise<Situation> {
@@ -73,7 +77,7 @@ export class SituationBuilder {
     };
 
     let nextIndex = 0;
-    const workerCount = Math.min(4, maxScans);
+    const workerCount = Math.min(this.pbpMaxConcurrency, maxScans);
     const worker = async (): Promise<void> => {
       while (true) {
         if (meta.startsMatched >= inputs.limits.minStarts || meta.gamesScanned >= maxScans) {
@@ -157,4 +161,11 @@ function normalizeInputs(inputs: SituationInputs): SituationInputs {
     ...inputs,
     sport: inputs.sport ?? "nba",
   };
+}
+
+function sanitizePositiveInt(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+    return fallback;
+  }
+  return Math.floor(value);
 }

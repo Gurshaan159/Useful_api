@@ -38,6 +38,9 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
     apiKey: config.sportradarNbaApiKey,
     baseUrl: config.sportradarNbaBaseUrl,
     scheduleCache,
+    retryMaxAttempts: config.sportradarRetryMaxAttempts,
+    retryBaseDelayMs: config.sportradarRetryBaseDelayMs,
+    retryMaxDelayMs: config.sportradarRetryMaxDelayMs,
   });
   const sportradarSoccerClient = new SportradarSoccerClient({
     apiKey: config.sportradarSoccerApiKey,
@@ -51,7 +54,10 @@ export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance
   ]);
 
   const situationRepository = deps.situationRepository ?? new InMemorySituationRepository();
-  const situationBuilder = deps.situationBuilder ?? new SituationBuilder({ adapterRegistry });
+  const situationBuilder = deps.situationBuilder ?? new SituationBuilder({
+    adapterRegistry,
+    pbpMaxConcurrency: config.situationPbpMaxConcurrency,
+  });
   const liveSessionStore = new InMemoryLiveSessionStore();
   const openAiClient = new OpenAiClient({
     apiKey: config.openAiApiKey,

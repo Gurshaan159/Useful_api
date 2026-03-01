@@ -18,6 +18,9 @@ export interface SportradarClientConfig {
   baseUrl: string;
   timeoutMs?: number;
   scheduleCache?: ScheduleCache;
+  retryMaxAttempts?: number;
+  retryBaseDelayMs?: number;
+  retryMaxDelayMs?: number;
 }
 
 export class SportradarClient {
@@ -29,11 +32,20 @@ export class SportradarClient {
 
   private readonly scheduleCache: ScheduleCache;
 
+  private readonly retryMaxAttempts: number;
+
+  private readonly retryBaseDelayMs: number;
+
+  private readonly retryMaxDelayMs: number;
+
   constructor(config: SportradarClientConfig) {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
     this.timeoutMs = config.timeoutMs ?? 10_000;
     this.scheduleCache = config.scheduleCache ?? new ScheduleCache();
+    this.retryMaxAttempts = sanitizePositiveInt(config.retryMaxAttempts, 5);
+    this.retryBaseDelayMs = sanitizePositiveInt(config.retryBaseDelayMs, 600);
+    this.retryMaxDelayMs = sanitizePositiveInt(config.retryMaxDelayMs, 15_000);
   }
 
   async getScheduleGameIds(season: SituationSeasonInput): Promise<string[]> {
@@ -88,41 +100,72 @@ export class SportradarClient {
   private async fetchJson(path: string, operation: string): Promise<unknown> {
     const separator = path.includes("?") ? "&" : "?";
     const url = `${this.baseUrl}${path}${separator}api_key=${encodeURIComponent(this.apiKey)}`;
-    const signal = AbortSignal.timeout(this.timeoutMs);
+    let lastStatus: number | undefined;
+    for (let attempt = 1; attempt <= this.retryMaxAttempts; attempt += 1) {
+      const signal = AbortSignal.timeout(this.timeoutMs);
+      let response: Response;
+      try {
+        response = await fetch(url, { signal });
+      } catch (error) {
+        if (isAbortError(error)) {
+          if (attempt >= this.retryMaxAttempts) {
+            throw new UpstreamTimeoutError("Sportradar request timed out.", {
+              provider: "sportradar",
+              operation,
+              timeoutMs: this.timeoutMs,
+              attempts: attempt,
+            });
+          }
+          await sleep(calculateBackoffDelay(attempt, this.retryBaseDelayMs, this.retryMaxDelayMs));
+          continue;
+        }
+        if (attempt >= this.retryMaxAttempts) {
+          throw new UpstreamError("Failed to reach Sportradar.", {
+            provider: "sportradar",
+            operation,
+            attempts: attempt,
+          });
+        }
+        await sleep(calculateBackoffDelay(attempt, this.retryBaseDelayMs, this.retryMaxDelayMs));
+        continue;
+      }
 
-    let response: Response;
-    try {
-      response = await fetch(url, { signal });
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw new UpstreamTimeoutError("Sportradar request timed out.", {
+      if (response.ok) {
+        try {
+          return await response.json();
+        } catch (_error) {
+          throw new UpstreamError("Sportradar returned invalid JSON payload.", {
+            provider: "sportradar",
+            operation,
+            attempts: attempt,
+          });
+        }
+      }
+
+      lastStatus = response.status;
+      const retryable = isRetryableStatus(response.status);
+      if (!retryable || attempt >= this.retryMaxAttempts) {
+        throw new UpstreamError("Sportradar returned non-success status.", {
           provider: "sportradar",
           operation,
-          timeoutMs: this.timeoutMs,
+          status: response.status,
+          attempts: attempt,
+          maxAttempts: this.retryMaxAttempts,
         });
       }
-      throw new UpstreamError("Failed to reach Sportradar.", {
-        provider: "sportradar",
-        operation,
-      });
+
+      const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
+      const delayMs = retryAfterMs ?? calculateBackoffDelay(attempt, this.retryBaseDelayMs, this.retryMaxDelayMs);
+      await sleep(delayMs);
     }
 
-    if (!response.ok) {
-      throw new UpstreamError("Sportradar returned non-success status.", {
-        provider: "sportradar",
-        operation,
-        status: response.status,
-      });
-    }
-
-    try {
-      return await response.json();
-    } catch (_error) {
-      throw new UpstreamError("Sportradar returned invalid JSON payload.", {
-        provider: "sportradar",
-        operation,
-      });
-    }
+    throw new UpstreamError("Sportradar returned non-success status.", {
+      provider: "sportradar",
+      operation,
+      status: lastStatus,
+      attempts: this.retryMaxAttempts,
+      maxAttempts: this.retryMaxAttempts,
+    });
   }
 }
 
@@ -131,6 +174,42 @@ function isAbortError(error: unknown): boolean {
     return false;
   }
   return "name" in error && (error as { name: string }).name === "AbortError";
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const retryAfterSeconds = Number(value);
+  if (Number.isFinite(retryAfterSeconds)) {
+    return Math.max(0, Math.round(retryAfterSeconds * 1000));
+  }
+  const retryAfterDateMs = Date.parse(value);
+  if (Number.isNaN(retryAfterDateMs)) {
+    return null;
+  }
+  return Math.max(0, retryAfterDateMs - Date.now());
+}
+
+function calculateBackoffDelay(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
+  const exponential = Math.min(maxDelayMs, baseDelayMs * (2 ** (attempt - 1)));
+  const jitter = Math.floor(Math.random() * Math.min(250, Math.max(1, Math.floor(exponential * 0.25))));
+  return Math.min(maxDelayMs, exponential + jitter);
+}
+
+function sanitizePositiveInt(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 1) {
+    return fallback;
+  }
+  return Math.floor(value);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function extractScheduleGames(payload: unknown): ScheduleGameSummary[] {

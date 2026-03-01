@@ -107,6 +107,8 @@ const csv = await gametime.situations.exportCsv(id, 'nba');
 writeFileSync('austin-reaves-q4-down-1-15.csv', csv);
 ```
 
+`situations.create` automatically retries transient upstream failures (`429`, `502`, `503`, `504`) with capped exponential backoff. This keeps client usage simple, but heavily rate-limited periods can increase response time.
+
 ## API reference
 
 | Method | Description |
