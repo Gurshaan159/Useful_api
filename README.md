@@ -3,7 +3,7 @@
 A typed JavaScript client for live sports data, player predictions, and historical situation analysis. Supports **NBA** and **Soccer**.
 
 - **npm:** [gametime-api-client](https://www.npmjs.com/package/gametime-api-client)
-- **API:** https://gametimeapi.onrender.com
+- **Docs:** https://gametimeapi-8m0b.onrender.com/docs
 
 ---
 
