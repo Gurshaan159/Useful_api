@@ -1,13 +1,15 @@
 /**
  * Gametime API JavaScript Client
- * Live sports data, player analysis, and predictions for NBA & Soccer.
+ * Live sports data, player analysis, predictions, and historical situations for NBA & Soccer.
  *
  * @example
  * ```js
  * import { createClient } from 'gametime-api-client';
- * const api = createClient({ baseUrl: 'https://gametimeapi.onrender.com' });
+ * const api = createClient();
  * const games = await api.live.games('soccer');
  * const analysis = await api.live.soccerAnalysis({ sportEventId: games[0].sportEventId });
+ * const { id } = await api.situations.create({ player: {...}, filters: {...}, season: {...} });
+ * const csv = await api.situations.exportCsv(id, 'nba');
  * ```
  */
 
@@ -55,6 +57,22 @@ async function request<T>(
 
 function get<T>(baseUrl: string, path: string): Promise<T> {
   return request<T>(baseUrl, path, { method: "GET" });
+}
+
+async function getText(baseUrl: string, path: string): Promise<string> {
+  const url = `${baseUrl.replace(/\/$/, "")}${path}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = body?.error ?? body;
+    throw new ApiError(
+      err?.message ?? body?.message ?? res.statusText,
+      err?.code,
+      res.status,
+      err?.details
+    );
+  }
+  return res.text();
 }
 
 function post<T>(baseUrl: string, path: string, body: object): Promise<T> {
@@ -151,8 +169,70 @@ export interface NbaAnalysis {
   narration?: Record<string, unknown>;
 }
 
+/** Situation create filters */
+export interface SituationFiltersNba {
+  nba: {
+    quarter: 1 | 2 | 3 | 4;
+    timeRemainingSeconds: { gte: number; lte: number };
+    scoreDiff: { gte: number; lte: number };
+  };
+}
+
+export interface SituationFiltersSoccer {
+  soccer: {
+    half: 1 | 2;
+    minuteRange: { gte: number; lte: number };
+    scoreState: "leading" | "drawing" | "trailing";
+    goalDiffRange?: { gte: number; lte: number };
+  };
+}
+
+export interface CreateSituationParams {
+  sport?: "nba" | "soccer";
+  player: { name: string; id?: string; team?: string };
+  filters: SituationFiltersNba | SituationFiltersSoccer;
+  limits?: { maxGames?: number; minStarts?: number; maxStartsPerGame?: number };
+  game?: { id: string };
+  season?: { year: number; type: "REG" | "PST" | "PRE" };
+}
+
+export interface CreateSituationResponse {
+  id: string;
+  gamesScanned: number;
+  gamesUsed: number;
+}
+
+export interface SituationAnalysis {
+  id: string;
+  status: "ready" | "failed";
+  analysis: {
+    gamesScanned: number;
+    gamesUsed: number;
+    startsMatched: number;
+    reliabilityGrade: "A" | "B" | "C" | "D";
+    totals: Record<string, number>;
+    perStart: Record<string, number>;
+  };
+}
+
+/** Situations: create, analysis, CSV export */
+export interface SituationsApi {
+  /** Create a situation (provide either game or season, not both) */
+  create(params: CreateSituationParams): Promise<CreateSituationResponse>;
+
+  /** Get analysis for a situation */
+  analysis(id: string, sport: "nba" | "soccer"): Promise<SituationAnalysis>;
+
+  /** Export situation stats as CSV string */
+  exportCsv(
+    id: string,
+    sport: "nba" | "soccer",
+    options?: { includeSummary?: boolean }
+  ): Promise<string>;
+}
+
 /** Create a Gametime API client */
-export function createClient(options: ClientOptions = {}): { live: LiveApi } {
+export function createClient(options: ClientOptions = {}): { live: LiveApi; situations: SituationsApi } {
   const baseUrl = options.baseUrl ?? DEFAULT_BASE;
 
   const live: LiveApi = {
@@ -178,7 +258,23 @@ export function createClient(options: ClientOptions = {}): { live: LiveApi } {
     },
   };
 
-  return { live };
+  const situations: SituationsApi = {
+    create(params) {
+      return post<CreateSituationResponse>(baseUrl, "/v1/situations", params);
+    },
+
+    analysis(id, sport) {
+      return get<SituationAnalysis>(baseUrl, `/v1/situations/${encodeURIComponent(id)}/analysis?sport=${sport}`);
+    },
+
+    exportCsv(id, sport, options) {
+      const q = new URLSearchParams({ sport });
+      if (options?.includeSummary !== undefined) q.set("includeSummary", String(options.includeSummary));
+      return getText(baseUrl, `/v1/situations/${encodeURIComponent(id)}/export.csv?${q}`);
+    },
+  };
+
+  return { live, situations };
 }
 
 /** Pre-built client using default hosted API URL */
