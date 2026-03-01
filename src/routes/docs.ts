@@ -103,6 +103,20 @@ console.log('CSV saved:', fileName);</code></pre>
     "season": { "year": 2025, "type": "REG" }
   }'</code></pre>
 
+  <h2>WebSocket live stream</h2>
+  <p>Create a session, then connect to the stream to receive real-time events (goals, shots, insights, AI narration).</p>
+  <p><strong>1. Create a live session:</strong></p>
+  <pre><code>curl -X POST "https://gametimeapi.onrender.com/v1/live/sessions" \\
+  -H "content-type: application/json" \\
+  -d '{
+    "sport": "soccer",
+    "sportEventId": "sr:sport_event:61853276"
+  }'</code></pre>
+  <p>Response: <code>{"id": "sess_abc123..."}</code>. Use this <code>id</code> in step 2.</p>
+  <p><strong>2. Connect to the WebSocket stream:</strong></p>
+  <pre><code>npx wscat -c "wss://gametimeapi.onrender.com/v1/live/sessions/&lt;sessionId&gt;/stream"</code></pre>
+  <p>Replace <code>&lt;sessionId&gt;</code> with the <code>id</code> from step 1 (e.g. <code>sess_c56d48c8-b5f0-4f8d-86c0-3121ad9351a3</code>). For localhost, use <code>ws://localhost:3000/v1/live/sessions/&lt;sessionId&gt;/stream</code>.</p>
+
   <h2>Error Codes</h2>
   <p>200 Success | 404 Not Found | 409 Ambiguous Player | 422 Invalid Request | 502 Upstream Error | 504 Timeout</p>
 
